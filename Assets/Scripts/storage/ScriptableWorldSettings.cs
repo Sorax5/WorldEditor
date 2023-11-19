@@ -1,9 +1,7 @@
 using UnityEngine;
 using UnityEngine.Serialization;
 
-namespace logic
-{
-    public sealed class WorldGenerationSettings : ScriptableObject
+public sealed class ScriptableWorldSettings : ScriptableObject
     {
 
         [SerializeField] private int CHUNK_SIZE = 16;
@@ -70,6 +68,19 @@ namespace logic
                 position.z
             );
         }
-    
+        
+        /**
+         * Returns a WorldGeneratorSettings object with the values of this ScriptableWorldSettings.
+         */
+        public WorldGeneratorSettings GetWorldGeneratorSettings()
+        {
+            return new WorldGeneratorSettings(
+                CHUNK_SIZE,
+                NOISE_SCALE,
+                SEED,
+                BASE_HEIGHT,
+                MIN_HILL_HEIGHT,
+                MAX_HILL_HEIGHT
+            );
+        }
     }
-}

@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: WorldSettings
   m_EditorClassIdentifier: 
   CHUNK_SIZE: 16
-  NOISE_SCALE: 1
-  SEED: 105316
-  BASE_HEIGHT: 1
+  NOISE_SCALE: 0.06
+  SEED: 124127
+  BASE_HEIGHT: 0
   MAX_HILL_HEIGHT: 5
-  MIN_HILL_HEIGHT: 0
+  MIN_HILL_HEIGHT: 1

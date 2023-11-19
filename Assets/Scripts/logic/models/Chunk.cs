@@ -11,17 +11,16 @@ using Random = UnityEngine.Random;
 
 public class Chunk
 {
-
     private Vector2Int worldPosition; // Position du chunk dans le monde
     private BlockType[,,] blocks; // Tableau de blocs du chunk
-    private WorldGenerationSettings _settings;
+    private ScriptableWorldSettings _settings;
     private System.Random _random;
     public int ChunkSize
     {
         get => blocks.GetLength(0);
     }
 
-    public Chunk(Vector2Int worldPosition, WorldGenerationSettings settings)
+    public Chunk(Vector2Int worldPosition, ScriptableWorldSettings settings)
     {
         this.worldPosition = worldPosition;
         blocks = new BlockType[settings.GetChunkSize(), settings.GetChunkSize(), settings.GetChunkSize()];
@@ -405,6 +404,8 @@ public class Chunk
     /// <param name="type">Type of the block</param>
     public void SetBlockType(Vector3Int localPosition, BlockType type)
     {
+        if(localPosition.x < 0 || localPosition.x >= this.blocks.GetLength(0) || localPosition.y < 0 || localPosition.y >= this.blocks.GetLength(1) || localPosition.z < 0 || localPosition.z >= this.blocks.GetLength(2))
+            throw new Exception("The local worldPosition is not in the chunk");
         SetBlockType(localPosition.x, localPosition.y, localPosition.z, type);
     }
 
@@ -449,11 +450,6 @@ public class Chunk
         return positions;
     }
 
-    public BlockType GetBlockType(int x, int y, int z)
-    {
-        return GetBlock(new Vector3Int(x,y,z));
-    }
-
     public Vector2Int GetPosition()
     {
         return this.worldPosition;
@@ -486,5 +482,80 @@ public class Chunk
     {
         return this.blocks;
     }
+    
+    public Vector3Int[] GetBlocksWorldPosition()
+    {
+        Vector3Int[] worldPositions = new Vector3Int[this.blocks.Length];
+        
+        int width = this.blocks.GetLength(0);
+        int height = this.blocks.GetLength(1);
+        int depth = this.blocks.GetLength(2);
+        
+        int index = 0;
+        
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height ; y++)
+            {
+                for (int z = 0; z < depth; z++)
+                {
+                    Vector3Int localPosition = new Vector3Int(x, y, z);
+                    Vector3Int worldTilePosition = WorldTilePosition(localPosition);
+                    
+                    worldPositions[index] = worldTilePosition;
+                    index++;
+                }
+            }
+        }
+        return worldPositions;
+    }
+    
+    public BlockType[] GetBlocksType()
+    {
+        BlockType[] blockTypes = new BlockType[this.blocks.Length];
+        
+        int width = this.blocks.GetLength(0);
+        int height = this.blocks.GetLength(1);
+        int depth = this.blocks.GetLength(2);
+        
+        int index = 0;
+        
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height ; y++)
+            {
+                for (int z = 0; z < depth; z++)
+                {
+                    blockTypes[index] = this.blocks[x, y, z];
+                    index++;
+                }
+            }
+        }
+        return blockTypes;
+    }
+    
+    /*public Dictionary<Vector3Int,BlockType> GetBlocksWorldPosition()
+    {
+        Dictionary<Vector3Int, BlockType> blockTypes = new Dictionary<Vector3Int, BlockType>();
+
+        int width = this.blocks.GetLength(0);
+        int height = this.blocks.GetLength(1);
+        int depth = this.blocks.GetLength(2);
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                for (int z = 0; z < depth; z++)
+                {
+                    Vector3Int localPosition = new Vector3Int(x, y, z);
+                    Vector3Int worldTilePosition;
+                    
+                    blockTypes.Add(worldTilePosition, this.blocks[x, y, z]);
+                }
+            }
+        }
+        return blockTypes;
+    }*/
 
 }

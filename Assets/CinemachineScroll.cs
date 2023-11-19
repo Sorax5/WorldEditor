@@ -35,7 +35,7 @@ public class CinemachineScroll : MonoBehaviour
         else if (scroll < 0f)
         {
             // zoom out
-            if (this.mainCamera.m_Lens.OrthographicSize < 8)
+            if (this.mainCamera.m_Lens.OrthographicSize < 32)
             {
                 this.mainCamera.m_Lens.OrthographicSize += 1;
             }

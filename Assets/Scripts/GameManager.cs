@@ -40,13 +40,13 @@ public class GameManager : MonoBehaviour
 
     #endregion
 
-    [SerializeField] private WorldGenerationSettings settings;
+    [SerializeField] private ScriptableWorldSettings settings;
     [SerializeField] private List<TileBase> tiles;
     [SerializeField] private List<BlockType> types;
 
     private TileBlockTypeFabric fabric;
 
-    public WorldGenerationSettings Settings => this.settings;
+    public ScriptableWorldSettings Settings => this.settings;
 
 
     // Start is called before the first frame update

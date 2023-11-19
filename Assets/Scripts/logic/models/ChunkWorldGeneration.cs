@@ -1,98 +1,131 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using logic;
 using logic.models;
-using UnityEngine;
 
-[CreateAssetMenu(fileName = "ChunkWorldGeneration", menuName = "WorldGeneration/ChunkWorldGeneration", order = 0)]
 public class ChunkWorldGeneration : WorldGeneration
 {
-    private readonly Dictionary<Vector2Int, Chunk> _chunks = new Dictionary<Vector2Int, Chunk>();
+    private readonly Dictionary<Location, BaseChunk> _chunks = new Dictionary<Location, BaseChunk>();
+    
+    public ChunkWorldGeneration(WorldGeneratorSettings settings) : base(settings)
+    {
+    }
 
     public override BlockType GetBlockType(int x, int y, int z)
     {
-        Vector2Int chunkPosition = GetChunkPosition(new Vector2Int(x, y));
-        Chunk chunk = GetChunk(chunkPosition);
-
-        if (chunk != null)
-        {
-            return chunk.GetBlock(new Vector3Int(x - chunkPosition.x, y - chunkPosition.y));
-        }
-        
-        Chunk newChunk = new Chunk(chunkPosition, GameManager.Instance.Settings);
-        _chunks.Add(chunkPosition, newChunk);
-
-        return newChunk.GetBlock(new Vector3Int(x - chunkPosition.x, y - chunkPosition.y));
+        Location chunkPosition = GetChunkPosition(new Location(x, y, z));
+        BaseChunk chunk = GetChunk(chunkPosition);
+        return chunk.GetBlockType(x, y, z);
     }
-
-    public override BlockType GetBlockType(Vector3Int position)
+    public override BlockType GetBlockType(Location position)
     {
-        return GetBlockType(position.x, position.y, position.z);
+        return GetBlockType(position.X, position.Y, position.Z);
     }
 
     public override void SetBlockType(int x, int y, int z, BlockType blockType)
     {
-        SetBlockType(new Vector3Int(x,y,z),blockType);
+        SetBlockType(new Location(x,y,z),blockType);
     }
     
-    public override void SetBlockType(Vector3Int position, BlockType blockType)
+    public override void SetBlockType(Location position, BlockType blockType)
     {
-        Vector2Int chunkPosition = GetChunkPosition(new Vector2Int(position.x, position.y));
-        Chunk chunk = GetChunk(chunkPosition);
-        
-        Vector3Int localPosition = chunk.RelativePosition(position.x, position.y, position.z);
+        Location chunkPosition = GetChunkPosition(position);
+        BaseChunk chunk = GetChunk(chunkPosition);
+
+        Location localPosition = chunk.LocalPostion(position);
         
         chunk.SetBlockType(localPosition, blockType);
         RaiseOnBlockChanged(position, blockType);
     }
 
-    public override Dictionary<Vector3Int,BlockType> GetBlocksInRadius(Vector3Int position, int radius)
+    public override List<Block> GetBlocksInRadius(Location position, int radius)
     {
-        Dictionary<Vector3Int, BlockType> blocks = new Dictionary<Vector3Int, BlockType>();
-        int chunkSize = GameManager.Instance.Settings.GetChunkSize();
-        
-        foreach (Chunk chunk in GetChunksInRadius(new Vector2Int(position.x, position.y), radius))
-        {
-            BlockType[,,] chunkBlocks = chunk.GetBlocks();
-            Vector2Int chunkPosition = chunk.GetPosition();
-            
-            for (int x = 0; x < chunkSize; x++)
-            {
-                for (int y = 0; y < chunkSize; y++)
-                {
-                    for (int z = 0; z < chunkSize; z++)
-                    {
-                        Vector3Int cellPosition = new Vector3Int(chunkPosition.x, chunkPosition.y, z) + new Vector3Int(x, y, z);
-                        BlockType blockType = chunkBlocks[x, y, z];
+        List<Block> blocks = new List<Block>();
+        int chunkSize = this.Settings.GetChunkSize();
 
-                        lock (blocks)
-                        {
-                            blocks.Add(cellPosition, blockType);
-                        }
-                    }
-                }
+        Location startChunkPos = GetChunkPosition(new Location(position.X - radius, position.Y - radius, position.Z));
+        Location endChunkPos = GetChunkPosition(new Location(position.X + radius, position.Y + radius, position.Z));
+
+        int estimatedBlockCount = ((endChunkPos.X - startChunkPos.X) / chunkSize + 1) * ((endChunkPos.Y - startChunkPos.Y) / chunkSize + 1);
+        blocks.Capacity = estimatedBlockCount;
+
+        for (int x = startChunkPos.X; x <= endChunkPos.X; x += chunkSize)
+        {
+            for (int y = startChunkPos.Y; y <= endChunkPos.Y; y += chunkSize)
+            {
+                var chunkBlocks = GetChunk(new Location(x, y, position.Z)).GetAllBlocks();
+                blocks.AddRange(chunkBlocks);
             }
         }
 
         return blocks;
     }
-
-    public override Dictionary<Vector3Int,BlockType> GetBlocksBetween(Vector3Int position1, Vector3Int position2)
+    
+    
+    
+    public override List<Block> GetBlocksBetween(Location position1, Location position2)
     {
-        return new Dictionary<Vector3Int, BlockType>();
+        return new List<Block>();
     }
 
-    public override async Task<Dictionary<Vector3Int, BlockType>> GetBlocksAsyncInRadius(Vector3Int position, int radius)
+    public override async Task<List<Block>> GetBlocksAsyncInRadius(Location position, int radius)
     {
-        Dictionary<Vector3Int, BlockType> blocks = new Dictionary<Vector3Int, BlockType>();
-        List<Task> chunkTasks = new List<Task>();
-        
-        int chunkSize = GameManager.Instance.Settings.GetChunkSize();
+        /*int chunkSize = GameManager.Instance.Settings.GetChunkSize();
 
-        foreach (Chunk chunk in GetChunksInRadius(new Vector2Int(position.x, position.y), radius))
+        HashSet<BaseChunk> chunks = GetChunksInRadius(new Vector2Int(position.x, position.y), radius);
+
+        Dictionary<Vector3Int, BlockType> blocks = new Dictionary<Vector3Int, BlockType>();
+
+        await Task.WhenAll(chunks.Select(async chunk =>
+        {
+            BlockType[,,] chunkBlocks = chunk.GetBlocks();
+            Vector2Int chunkPosition = chunk.GetPosition();
+
+            // Calculez les limites du sous-volume du chunk à vérifier.
+            int startX = Mathf.Max(0, position.x - chunkPosition.x);
+            int endX = Mathf.Min(chunkSize, position.x + radius - chunkPosition.x + 1);
+            int startY = Mathf.Max(0, position.y - chunkPosition.y);
+            int endY = Mathf.Min(chunkSize, position.y + radius - chunkPosition.y + 1);
+
+            await Task.Run(() =>
+            {
+                for (int x = startX; x < endX; x++)
+                {
+                    for (int y = startY; y < endY; y++)
+                    {
+                        for (int z = 0; z < chunkSize; z++)
+                        {
+                            Vector3Int cellPosition = new Vector3Int(chunkPosition.x + x, chunkPosition.y + y, z);
+                            BlockType blockType = chunkBlocks[x, y, z];
+
+                            // Utilisez un verrou pour éviter les accès concurrents au dictionnaire.
+                            lock (blocks)
+                            {
+                                blocks[cellPosition] = blockType;
+                            }
+                        }
+                    }
+                }
+            });
+        }));*/
+
+        return new List<Block>();
+    }
+
+    public override async Task<List<Block>> GetBlocksAsyncBetween(Location position1, Location position2)
+    {
+        List<Block> blocks = new List<Block>();
+        List<Task> chunkTasks = new List<Task>();
+
+        int chunkSize = this.Settings.GetChunkSize();
+        
+        foreach (BaseChunk chunk in GetChunkInBetween(position1, position2))
         {
             chunkTasks.Add(Task.Run(() =>
             {
-                BlockType[,,] chunkBlocks = chunk.GetBlocks();
+                /*BlockType[,,] chunkBlocks = chunk.GetBlocks();
                 Vector2Int chunkPosition = chunk.GetPosition();
 
                 for (int x = 0; x < chunkSize; x++)
@@ -110,45 +143,7 @@ public class ChunkWorldGeneration : WorldGeneration
                             }
                         }
                     }
-                }
-            }));
-        }
-
-        await Task.WhenAll(chunkTasks);
-
-        return blocks;
-    }
-
-    public override async Task<Dictionary<Vector3Int, BlockType>> GetBlocksAsyncBetween(Vector3Int position1, Vector3Int position2)
-    {
-        Dictionary<Vector3Int, BlockType> blocks = new Dictionary<Vector3Int, BlockType>();
-        List<Task> chunkTasks = new List<Task>();
-        
-        int chunkSize = GameManager.Instance.Settings.GetChunkSize();
-        
-        foreach (Chunk chunk in GetChunkInBetween(new Vector2Int(position1.x, position1.y), new Vector2Int(position2.x, position2.y)))
-        {
-            chunkTasks.Add(Task.Run(() =>
-            {
-                BlockType[,,] chunkBlocks = chunk.GetBlocks();
-                Vector2Int chunkPosition = chunk.GetPosition();
-
-                for (int x = 0; x < chunkSize; x++)
-                {
-                    for (int y = 0; y < chunkSize; y++)
-                    {
-                        for (int z = 0; z < chunkSize; z++)
-                        {
-                            Vector3Int cellPosition = new Vector3Int(chunkPosition.x, chunkPosition.y, z) + new Vector3Int(x, y, z);
-                            BlockType blockType = chunkBlocks[x, y, z];
-
-                            lock (blocks)
-                            {
-                                blocks.Add(cellPosition, blockType);
-                            }
-                        }
-                    }
-                }
+                }*/
             }));
         }
         
@@ -158,85 +153,104 @@ public class ChunkWorldGeneration : WorldGeneration
         
     }
 
-    public override void ResetBlocksInRadius(Vector3Int position, int radius)
+    public override void ResetBlocksInRadius(Location position, int radius)
     {
-        int chunkSize = GameManager.Instance.Settings.GetChunkSize();
+        int chunkSize = this.Settings.GetChunkSize();
 
-        foreach (Chunk chunk in GetChunksInRadius(new Vector2Int(position.x, position.y), radius))
+        foreach (BaseChunk chunk in GetChunksInRadius(position, radius))
         {
-            this._chunks.Remove(chunk.GetPosition());
+            this._chunks.Remove(chunk.Position);
         }
     }
 
-    private Chunk GetChunk(Vector2Int chunkPosition)
+    private BaseChunk GetChunk(Location chunkPosition)
     {
-        if (_chunks.TryGetValue(chunkPosition, out Chunk chunk))
+        if (_chunks.TryGetValue(chunkPosition, out BaseChunk chunk))
         {
             return chunk;
         }
 
-        Chunk newChunk = CreateChunk(chunkPosition);
-        _chunks.Add(chunkPosition, newChunk);
-        return newChunk;
-    }
-
-    private Chunk CreateChunk(Vector2Int chunkPosition)
-    {
-        return new Chunk(chunkPosition, GameManager.Instance.Settings);
-    }
-
-    private Vector2Int GetChunkPosition(Vector2Int blockPosition)
-    {
-        var chunkSize = GameManager.Instance.Settings.GetChunkSize();
-
-        // Calculez les coordonnées du chunk.
-        int x = Mathf.FloorToInt((float)blockPosition.x / chunkSize) * chunkSize;
-        int y = Mathf.FloorToInt((float)blockPosition.y / chunkSize) * chunkSize;
-
-        return new Vector2Int(x, y);
-    }
-
-    private HashSet<Chunk> GetChunksInRadius(Vector2Int position, int radius)
-    {
-        HashSet<Chunk> chunksInRadius = new HashSet<Chunk>();
-
-        int minX = position.x - radius;
-        int maxX = position.x + radius;
-        int minY = position.y - radius;
-        int maxY = position.y + radius;
-
-        for (int x = minX; x <= maxX; x += 1)
+        if (!_chunks.ContainsKey(chunkPosition))
         {
-            for (int y = minY; y <= maxY; y += 1)
+            BaseChunk newChunk = CreateChunk(chunkPosition);
+            _chunks.Add(chunkPosition, newChunk);
+            return newChunk;
+        }
+        
+        return null;
+    }
+
+    private BaseChunk CreateChunk(Location chunkPosition)
+    {
+        return new HeightlessChunk(chunkPosition.X, chunkPosition.Y, this.Settings, new PlainChunkGenerator());
+    }
+
+    private Location GetChunkPosition(Location blockPosition)
+    {
+        var chunkSize = this.Settings.GetChunkSize();
+        
+        int x = (int)MathF.Floor((float)blockPosition.X / chunkSize) * chunkSize;
+        int y = (int)MathF.Floor((float)blockPosition.Y / chunkSize) * chunkSize;
+
+        return new Location(x, y, blockPosition.Z);
+    }
+
+    private HashSet<BaseChunk> GetChunksInRadius(Location position, int radius)
+    {
+        HashSet<BaseChunk> chunksInRadius = new HashSet<BaseChunk>();
+        int chunkSize = 16;
+
+        Location startChunkPos = GetChunkPosition(new Location(position.X - radius, position.Y - radius, position.Z));
+        Location endChunkPos = GetChunkPosition(new Location(position.X + radius, position.Y + radius, position.Z));
+
+        HashSet<Location> uniqueChunkPositions = new HashSet<Location>();
+
+        for (int x = startChunkPos.X; x <= endChunkPos.X; x += chunkSize)
+        {
+            for (int y = startChunkPos.Y; y <= endChunkPos.Y; y += chunkSize)
             {
-                Vector2Int chunkPosition = GetChunkPosition(new Vector2Int(x, y));
-                Chunk chunk = GetChunk(chunkPosition);
-                chunksInRadius.Add(chunk);
+                uniqueChunkPositions.Add(new Location(x, y, position.Z));
             }
+        }
+
+        foreach (Location chunkPosition in uniqueChunkPositions)
+        {
+            chunksInRadius.Add(GetChunk(chunkPosition));
         }
 
         return chunksInRadius;
     }
     
-    private HashSet<Chunk> GetChunkInBetween(Vector2Int position1, Vector2Int position2)
+    private HashSet<BaseChunk> GetChunkInBetween(Location position1, Location position2)
     {
-        HashSet<Chunk> chunksInRadius = new HashSet<Chunk>();
-
-        int minX = Mathf.Min(position1.x, position2.x);
-        int maxX = Mathf.Max(position1.x, position2.x);
-        int minY = Mathf.Min(position1.y, position2.y);
-        int maxY = Mathf.Max(position1.y, position2.y);
+        HashSet<BaseChunk> chunksInRadius = new HashSet<BaseChunk>();
+        
+        int minX = (int)MathF.Min(position1.X, position2.X);
+        int maxX = (int)MathF.Max(position1.X, position2.X);
+        int minY = (int)MathF.Min(position1.Y, position2.Y);
+        int maxY = (int)MathF.Max(position1.Y, position2.Y);
 
         for (int x = minX; x <= maxX; x += 1)
         {
             for (int y = minY; y <= maxY; y += 1)
             {
-                Vector2Int chunkPosition = GetChunkPosition(new Vector2Int(x, y));
-                Chunk chunk = GetChunk(chunkPosition);
+                Location chunkPosition = GetChunkPosition(new Location(x, y, position1.Z));
+                BaseChunk chunk = GetChunk(chunkPosition);
                 chunksInRadius.Add(chunk);
             }
         }
 
         return chunksInRadius;
+    }
+
+    public override Block GetBlock(Location position)
+    {
+        BaseChunk chunk = GetChunk(GetChunkPosition(position));
+        return chunk.GetBlock(position);
+    }
+
+    public override Block GetBlock(int x, int y, int z)
+    {
+        return GetBlock(new Location(x, y, z));
     }
 }
