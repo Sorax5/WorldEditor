@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using logic.models;
+using PimDeWitte.UnityMainThreadDispatcher;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -35,14 +36,15 @@ public class BlockView : MonoBehaviour
     [SerializeField] private int renderDistance = 1;
     
     private Queue<Action> worldGenerationQueue;
+    
     private bool isGeneratingWorld = false;
 
     private void Start()
     {
         worldGenerationQueue = new Queue<Action>();
-        this.GenerateWorldAsync(blockController.GetWorld());
+        this.GenerateWorldByChunk(blockController.GetWorld());
     }
-    
+
     private void OnBlockChanged(Location position, BlockType blockType)
     {
         TileBase tile = blockTypeToTile.TryGetValue(blockType, out TileBase specificTile) ? specificTile : null;
@@ -54,7 +56,7 @@ public class BlockView : MonoBehaviour
         if (!isGeneratingWorld)
         {
             // Ajoutez la génération du monde à la file d'attente.
-            worldGenerationQueue.Enqueue(() => GenerateWorldAsync(this.blockController.GetWorld()));
+            worldGenerationQueue.Enqueue(() => GenerateWorldByChunk(this.blockController.GetWorld()));
 
             // Démarrez le processus de génération du monde s'il n'est pas déjà en cours.
             if (!isGeneratingWorld)
@@ -81,30 +83,22 @@ public class BlockView : MonoBehaviour
         isGeneratingWorld = false;
     }
 
-    private async Task GenerateWorldAsync(WorldGeneration world)
+    private async void GenerateWorldAsync(WorldGeneration world)
     {
-        Debug.Log("Generating world...");
         Vector3Int playerPosition = groundTileMap.WorldToCell(mainCamera.transform.position);
-        Debug.Log($"Player position: {playerPosition}");
         Location pl = new Location(playerPosition.x, playerPosition.y, playerPosition.z);
         int renderSize = renderDistance * 16;
-        Debug.Log($"Player position: {pl}");
 
         List<Block> blocks = world.GetBlocksInRadius(pl, renderSize);
-        Debug.Log($"Blocks: {blocks.Count}");
-
+            
         List<Vector3Int> tilePositionsToUpdate = new List<Vector3Int>();
         List<TileBase> tilesToUpdate = new List<TileBase>();
-        
-        Debug.Log($"Blocks to update: {blocks.Count}");
 
         foreach (var kvp in blocks)
         {
             var blockType = kvp.GetBlockType();
             var position = kvp.GetPosition();
             var tile = groundTileMap.GetTile(new Vector3Int(position.X, position.Y, position.Z));
-            
-            Debug.Log($"Block: {position} - {blockType} - {tile}");
 
             if (ShouldUpdateTile(blockType, tile))
             {
@@ -113,53 +107,92 @@ public class BlockView : MonoBehaviour
             }
         }
 
-        groundTileMap.SetTiles(tilePositionsToUpdate.ToArray(), tilesToUpdate.ToArray());
+        PlaceTiles(tilePositionsToUpdate.ToArray(), tilesToUpdate.ToArray());
+    }
+
+    private void GenerateWorldByChunk(WorldGeneration world)
+    {
+        Vector3Int playerPosition = groundTileMap.WorldToCell(mainCamera.transform.position);
+        Location pl = new Location(playerPosition.x, playerPosition.y, playerPosition.z);
+        int renderSize = renderDistance * 16;
         
-        /*foreach (var kvp in map)
+        HashSet<BaseChunk> chunks = world.GetChunksInRadius(pl, renderSize);
+        foreach (BaseChunk chunk in chunks)
         {
-            if (!_blockTypeToTile.TryGetValue(kvp.Value, out TileBase specificTile))
-            {
-                continue; // Ignore les blocs sans tuile correspondante.
-            }
+            GenerateChunkByEachBlock(chunk);
+        }
+    }
+    
+    private void GenerateChunk(BaseChunk chunk)
+    {
+        List<Block> blocks = chunk.GetAllBlocks();
+        
+        List<Vector3Int> tilePositionsToUpdate = new List<Vector3Int>();
+        List<TileBase> tilesToUpdate = new List<TileBase>();
+        
+        foreach (var kvp in blocks)
+        {
+            var blockType = kvp.GetBlockType();
+            var position = kvp.GetPosition();
+            var tile = groundTileMap.GetTile(new Vector3Int(position.X, position.Y, position.Z));
 
-            TileBase tile = ground.GetTile(kvp.Key);
-
-            if (tile == null || tile != specificTile)
+            if (ShouldUpdateTile(blockType, tile))
             {
-                tilesToUpdate.Add(kvp.Key);
+                tilePositionsToUpdate.Add(new Vector3Int(position.X, position.Y, position.Z));
+                tilesToUpdate.Add(GetCounterPartTile(blockType));
             }
         }
 
-        if (tilesToUpdate.Count > 0)
+        PlaceTiles(tilePositionsToUpdate.ToArray(), tilesToUpdate.ToArray());
+    }
+
+    private void GenerateChunkByEachBlock(BaseChunk chunk)
+    {
+        List<Block> blocks = chunk.GetAllBlocks();
+        
+        Vector3Int playerPosition = groundTileMap.WorldToCell(mainCamera.transform.position);
+        Location pl = new Location(playerPosition.x, playerPosition.y, playerPosition.z);
+        
+        StartCoroutine(PlaceBlock(blocks));
+    }
+
+    private IEnumerator PlaceBlock(List<Block> blocks)
+    {
+        List<Vector3Int> positionsToUpdate = new List<Vector3Int>();
+        List<TileBase> counterpartTiles = new List<TileBase>();
+
+        BlockType blockType;
+        Location position;
+        Vector3Int positionInt;
+        TileBase tile;
+
+        foreach (var block in blocks)
         {
-            // Convertissez la liste en tableau pour l'utilisation de SetTiles.
-            Vector3Int[] tilePositions = tilesToUpdate.ToArray();
+            blockType = block.GetBlockType();
+            position = block.GetPosition();
+            positionInt = new Vector3Int(position.X, position.Y, position.Z);
+            tile = groundTileMap.GetTile(positionInt);
 
-            // Créez un tableau de tuiles à partir des positions.
-            TileBase[] tileArray = new TileBase[tilePositions.Length];
-            for (int i = 0; i < tilePositions.Length; i++)
+            if (ShouldUpdateTile(blockType, tile))
             {
-                tileArray[i] = _blockTypeToTile[map[tilePositions[i]]];
+                positionsToUpdate.Add(positionInt);
+                counterpartTiles.Add(GetCounterPartTile(blockType));
             }
-
-            // Mettez à jour les tuiles en une seule opération.
-            ground.SetTiles(tilePositions, tileArray);
-        }*/
-
-        /*foreach (var keyValuePair in map.ToList())
-        {
-            TileBase tile = ground.GetTile(keyValuePair.Key);
-            BlockType type = _blockTypeToTile.FirstOrDefault(x => x.Value == tile).Key;
-
-            if (keyValuePair.Value == type)
-            {
-                continue;
-            }
-            
-            tileMap.Add(keyValuePair.Key, _blockTypeToTile.TryGetValue(keyValuePair.Value, out TileBase specificTile) ? specificTile : null);
         }
 
-        ground.SetTiles(tileMap.Keys.ToArray(), tileMap.Values.ToArray());*/
+        if (positionsToUpdate.Count > 0)
+        {
+            PlaceTiles(positionsToUpdate.ToArray(), counterpartTiles.ToArray());
+        }
+
+        yield return null;
+    }
+
+    
+    
+    private void PlaceTiles(Vector3Int[] positions, TileBase[] tiles)
+    {
+        groundTileMap.SetTiles(positions, tiles);
     }
 
     private TileBase GetCounterPartTile(BlockType argValue)

@@ -72,47 +72,33 @@ public class ChunkWorldGeneration : WorldGeneration
 
     public override async Task<List<Block>> GetBlocksAsyncInRadius(Location position, int radius)
     {
-        /*int chunkSize = GameManager.Instance.Settings.GetChunkSize();
+        HashSet<BaseChunk> chunksInRadius = new HashSet<BaseChunk>();
+        
+        int CHUNK_RADIUS = Settings.GetChunkSize() * radius;
 
-        HashSet<BaseChunk> chunks = GetChunksInRadius(new Vector2Int(position.x, position.y), radius);
+        Location startChunkPos = GetChunkPosition(new Location(position.X - radius, position.Y - radius, position.Z));
+        Location endChunkPos = GetChunkPosition(new Location(position.X + radius, position.Y + radius, position.Z));
 
-        Dictionary<Vector3Int, BlockType> blocks = new Dictionary<Vector3Int, BlockType>();
+        HashSet<Location> uniqueChunkPositions = new HashSet<Location>();
 
-        await Task.WhenAll(chunks.Select(async chunk =>
+        for (int x = startChunkPos.X; x <= endChunkPos.X; x += CHUNK_RADIUS)
         {
-            BlockType[,,] chunkBlocks = chunk.GetBlocks();
-            Vector2Int chunkPosition = chunk.GetPosition();
-
-            // Calculez les limites du sous-volume du chunk à vérifier.
-            int startX = Mathf.Max(0, position.x - chunkPosition.x);
-            int endX = Mathf.Min(chunkSize, position.x + radius - chunkPosition.x + 1);
-            int startY = Mathf.Max(0, position.y - chunkPosition.y);
-            int endY = Mathf.Min(chunkSize, position.y + radius - chunkPosition.y + 1);
-
-            await Task.Run(() =>
+            for (int y = startChunkPos.Y; y <= endChunkPos.Y; y += CHUNK_RADIUS)
             {
-                for (int x = startX; x < endX; x++)
-                {
-                    for (int y = startY; y < endY; y++)
-                    {
-                        for (int z = 0; z < chunkSize; z++)
-                        {
-                            Vector3Int cellPosition = new Vector3Int(chunkPosition.x + x, chunkPosition.y + y, z);
-                            BlockType blockType = chunkBlocks[x, y, z];
+                uniqueChunkPositions.Add(new Location(x, y, position.Z));
+            }
+        }
 
-                            // Utilisez un verrou pour éviter les accès concurrents au dictionnaire.
-                            lock (blocks)
-                            {
-                                blocks[cellPosition] = blockType;
-                            }
-                        }
-                    }
-                }
-            });
-        }));*/
+        var tasks = uniqueChunkPositions.Select(chunkPosition => Task.Run(() =>
+        {
+            chunksInRadius.Add(GetChunk(chunkPosition));
+        }));
 
-        return new List<Block>();
+        await Task.WhenAll(tasks);
+
+        return chunksInRadius.SelectMany(chunk => chunk.GetAllBlocks()).ToList();
     }
+
 
     public override async Task<List<Block>> GetBlocksAsyncBetween(Location position1, Location position2)
     {
@@ -195,7 +181,7 @@ public class ChunkWorldGeneration : WorldGeneration
         return new Location(x, y, blockPosition.Z);
     }
 
-    private HashSet<BaseChunk> GetChunksInRadius(Location position, int radius)
+    public override HashSet<BaseChunk> GetChunksInRadius(Location position, int radius)
     {
         HashSet<BaseChunk> chunksInRadius = new HashSet<BaseChunk>();
         int chunkSize = 16;

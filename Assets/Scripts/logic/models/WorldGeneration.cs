@@ -64,4 +64,6 @@ public abstract class WorldGeneration
     public abstract Task<List<Block>> GetBlocksAsyncInRadius(Location position, int radius);
     public abstract Task<List<Block>> GetBlocksAsyncBetween(Location position1, Location position2);
     public abstract void ResetBlocksInRadius(Location position, int radius);
+    
+    public abstract HashSet<BaseChunk> GetChunksInRadius(Location position, int radius);
 }

@@ -41,7 +41,6 @@ public class PlainChunkGenerator : IChunkGenerator
                 if (height < waterLevel)
                 {
                     blocks.Add(new Block(BlockType.WATER, new Location(x + localX, y + localY, waterLevel)));
-                    blocks.Add(new Block(BlockType.SAND, new Location(x + localX, y + localY, waterLevel - 1)));
                 }
             }
         }

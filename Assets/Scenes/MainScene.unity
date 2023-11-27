@@ -281,7 +281,7 @@ MonoBehaviour:
     - {fileID: 11400000, guid: 757d94c841f001640acaaecfe26e66c7, type: 2}
     - {fileID: 11400000, guid: 79d0f28e0a7091944b1b9a542b047415, type: 2}
     - {fileID: 11400000, guid: e0e4880dc7a2eb5498452ea295e3fef2, type: 2}
-  renderDistance: 2
+  renderDistance: 5
 --- !u!114 &191777714
 MonoBehaviour:
   m_ObjectHideFlags: 0
